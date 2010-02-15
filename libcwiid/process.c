@@ -236,17 +236,52 @@ int process_ext(struct wiimote *wiimote, unsigned char *data,
 		break;
 	case CWIID_EXT_MOTIONPLUS:
 		if (wiimote->state.rpt_mode & CWIID_RPT_MOTIONPLUS) {
-			motionplus_mesg = &ma->array[ma->count++].motionplus_mesg;
-			motionplus_mesg->type = CWIID_MESG_MOTIONPLUS;
-			motionplus_mesg->angle_rate[CWIID_PHI]   = ((uint16_t)data[5] & 0xFC)<<6 |
-			                                            (uint16_t)data[2];
-			motionplus_mesg->angle_rate[CWIID_THETA] = ((uint16_t)data[4] & 0xFC)<<6 |
-			                                            (uint16_t)data[1];
-			motionplus_mesg->angle_rate[CWIID_PSI]   = ((uint16_t)data[3] & 0xFC)<<6 |
-			                                            (uint16_t)data[0];
-			motionplus_mesg->low_speed[CWIID_PHI]    = ((uint8_t)data[3] & 0x01);
-			motionplus_mesg->low_speed[CWIID_THETA]  = ((uint8_t)data[4] & 0x02)>>1;
-			motionplus_mesg->low_speed[CWIID_PSI]    = ((uint8_t)data[3] & 0x02)>>1;
+			if (data[5] & 0x02) { /* filter out interleaved messages */
+				motionplus_mesg = &ma->array[ma->count++].motionplus_mesg;
+				motionplus_mesg->type = CWIID_MESG_MOTIONPLUS;
+				motionplus_mesg->angle_rate[CWIID_PHI]   = ((uint16_t)data[5] & 0xFC)<<6 |
+																										(uint16_t)data[2];
+				motionplus_mesg->angle_rate[CWIID_THETA] = ((uint16_t)data[4] & 0xFC)<<6 |
+																										(uint16_t)data[1];
+				motionplus_mesg->angle_rate[CWIID_PSI]   = ((uint16_t)data[3] & 0xFC)<<6 |
+																										(uint16_t)data[0];
+				motionplus_mesg->low_speed[CWIID_PHI]    = ((uint8_t)data[3] & 0x01);
+				motionplus_mesg->low_speed[CWIID_THETA]  = ((uint8_t)data[4] & 0x02)>>1;
+				motionplus_mesg->low_speed[CWIID_PSI]    = ((uint8_t)data[3] & 0x02)>>1;
+			} else { /* this is the passthrough data */
+				/* TODO: chosse Classic or Nunchuck */
+				if (1) {
+					if (wiimote->state.rpt_mode & CWIID_RPT_NUNCHUK) {
+						nunchuk_mesg = &ma->array[ma->count++].nunchuk_mesg;
+						nunchuk_mesg->type = CWIID_MESG_NUNCHUK;
+						nunchuk_mesg->stick[CWIID_X] = data[0];
+						nunchuk_mesg->stick[CWIID_Y] = data[1];
+						nunchuk_mesg->acc[CWIID_X] = data[2];
+						nunchuk_mesg->acc[CWIID_Y] = data[3];
+						nunchuk_mesg->acc[CWIID_Z] = (data[4] & 0xFE) | (data[5] >> 7);
+						nunchuk_mesg->buttons = ~(data[5] >> 2) & NUNCHUK_BTN_MASK;
+					}
+				} else { 
+					if (wiimote->state.rpt_mode & CWIID_RPT_CLASSIC) {
+						classic_mesg = &ma->array[ma->count++].classic_mesg;
+						classic_mesg->type = CWIID_MESG_CLASSIC;
+
+						classic_mesg->l_stick[CWIID_X] = data[0] & 0x3E;
+						classic_mesg->l_stick[CWIID_Y] = data[1] & 0x3E;
+						classic_mesg->r_stick[CWIID_X] = (data[0] & 0xC0)>>3 |
+																						 (data[1] & 0xC0)>>5 |
+																						 (data[2] & 0x80)>>7;
+						classic_mesg->r_stick[CWIID_Y] = data[2] & 0x1F;
+						classic_mesg->l = (data[2] & 0x60)>>2 |
+															(data[3] & 0xE0)>>5;
+						classic_mesg->r = data[3] & 0x1F;
+						classic_mesg->buttons = ~((uint16_t)data[4]<<8 |
+																			((uint16_t)data[5] & 0xFC) |
+																			((data[1] & 0x01) << 1) |
+																			(data[0] & 0x01));
+					}
+				}
+			}
 		}
 		break;
 	}
